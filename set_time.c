@@ -5,6 +5,7 @@
 #include "lcd.h"
 #include "keypad.h"
 #include "set_time.h"
+#include "serial.h"
 
 #define FOSC 7372800            // Clock frequency = Oscillator freq.
 #define BAUD 9600               // UART0 baud rate
@@ -25,10 +26,11 @@ extern volatile int real_time_display_flag;
 extern volatile int set_time_display_flag;
 extern volatile char system_on_flag;
 extern volatile char time_met_flag;
+extern volatile char comp_one;
 
 void real_time_init()
 {
-   uint8_t data[6] = {0x00, 0x51, 0x08, 0x13, 0x31, 0x08};
+   //uint8_t data[6] = {0x00, 0x04, 0x17, 0x13, 0x31, 0x08};
    iter = 0;
    wrong_time_flag = 0;
    real_time_display_flag = 1;
@@ -39,7 +41,7 @@ void real_time_init()
    init_timer1();
    adata[0] = 0x00;
     // write current time
-   status = i2c_io(DS1307_ADDR, adata, 1, data, 6, NULL, 0);
+   //status = i2c_io(DS1307_ADDR, adata, 1, data, 6, NULL, 0);
 }
 
 void lcd_twodigits(uint8_t data)
@@ -75,17 +77,11 @@ void set_time_feature()
      rtc_user_time[1]  = bcd_to_decimal(rdata[1]);
      rtc_user_time[0]  = bcd_to_decimal(rdata[0]);
      add_time();
-     while(1){
-        if(compare_time()){
-          time_met_flag = 1; 
-          break;
-        }
-     }
-     
 }
 
 void user_set_time()
 {
+    comp_one = 0;
     //char user_time[5];
     // reading data from rtc 
         lcd_moveto(1,0);
@@ -149,6 +145,7 @@ void user_set_time()
 
     lcd_writecommand(1);
     lcd_moveto(1,0);
+    iter = 0;
     //lcd_stringout("               ");
     //lcd_stringout(user_time);
     //return user_time;
@@ -207,7 +204,7 @@ ISR(TIMER1_COMPA_vect){
        lcd_writedata(':');
        lcd_twodigits(rdata[1]);
        lcd_writedata(':');
-       lcd_twodigits(rdata[0]);     
+       lcd_twodigits(rdata[0]); 
     }
     
     
@@ -224,56 +221,65 @@ ISR(TIMER1_COMPA_vect){
        lcd_moveto(1,9+iter);
     }
 
-    // compare time
-    //lcd_moveto(1,0);
-    //lcd_writedata(compare_time());
-    /*
-    if (compare_time() && !system_on_flag)
-    {
-        lcd_moveto(1,0);
-        lcd_stringout("System on");
-        time_met_flag = 1;
-        system_on_flag = 1;
-        //lcd_writecommand(1);
-    }
-    else if (compare_time() && system_on_flag)
-    {
-        lcd_moveto(1,0);
-        lcd_stringout("System off");
-        time_met_flag = 1;
-        system_on_flag = 0;
-        //lcd_writecommand(1);
-    }       
-    */
-    // if (compare_time())
-    // {
-    //    time_met_flag = 1;    
-    //    //lcd_moveto(1,0);
-    //    //lcd_writedata(time_met_flag + '0');
-    //    // lcd_moveto(1,3);
-    //    // lcd_writedata()
-    // }
     
-    // if (time_met_flag)
-    // {
+    if (compare_time() && (!comp_one))
+    {
+       comp_one++;
+       //lcd_moveto(1,0);
+        //lcd_stringout("Turning on");
+        time_met_flag = 1;
+        //lcd_moveto(1,10);
+        //lcd_writedata(time_met_flag + '0');
         
-    //     if (system_on_flag)
-    //     {
-    //        lcd_moveto(1,0);
-    //        lcd_stringout("System Off");
-    //        system_on_flag = 1;
-    //     }
-    //     else
-    //     {
-    //        lcd_moveto(1,0);
-    //        lcd_stringout("System On");
-    //        system_on_flag = 0;
-           
-    //     }
-    
-    // }
+         if (time_met_flag)
+        {
+           //system_on_flag ^= system_on_flag;
+           if (system_on_flag)
+           {
+              system_on_flag = 0;
+              lcd_moveto(1,0);
+              lcd_stringout("               ");
+              lcd_moveto(1,0);
+              lcd_stringout("System Off");
+              serial_txchar('f');
+           }
+           else
+           {
+              system_on_flag = 1;
+              lcd_moveto(1,0);
+              lcd_stringout("               ");
+              lcd_moveto(1,0);
+              lcd_stringout("System On");
+              serial_txchar('o');
+           }
+           //real_time_display_flag = 0;
+           //lcd_writecommand(1);
+           time_met_flag = 0;
+        }
+        /*
+        if (system_on_flag)
+        {
+            lcd_moveto(1,0);
+            lcd_stringout("System On");
+            serial_txchar('o');
+        }
+        else
+        {
+            lcd_moveto(1,0);
+            lcd_stringout("System Off");
+            serial_txchar('f');
+        }
+        */
+    }
+    else
+    {
+        //lcd_moveto(1,0);
+        //lcd_stringout("Turning on");
+        //time_met_flag = 0;
+        //lcd_writedata(time_met_flag + '0');
+    }       
+       
 }
-
 
 uint8_t i2c_io(uint8_t device_addr, uint8_t *ap, uint16_t an, 
                uint8_t *wp, uint16_t wn, uint8_t *rp, uint16_t rn)
